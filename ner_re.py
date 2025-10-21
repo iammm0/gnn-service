@@ -1,25 +1,16 @@
 from transformers import BertTokenizer, BertForTokenClassification, pipeline
-from modelscope import pipeline as modelscope_pipeline
 
 # 加载BERT模型进行命名实体识别
 tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
 model = BertForTokenClassification.from_pretrained('bert-base-chinese')
 nlp_bert = pipeline("ner", model=model, tokenizer=tokenizer)
 
-# 加载阿里社区的文档分割模型
-document_segmenter = modelscope_pipeline('document-segmentation',
-                                         model='iic/nlp_bert_document-segmentation_chinese-base')
-
 
 # 命名实体识别
 def ner(text):
-    # 使用阿里模型进行文档分割
-    segments = document_segmenter(text)
-    print(f"分段结果: {segments}")
-
-    # 使用BERT进行命名实体识别
     bert_entities = nlp_bert(text)
 
+    # 假设我们根据一些条件来设置 highlight 和 magnified
     entities = []
     for entity in bert_entities:
         # 默认的节点属性
@@ -30,7 +21,7 @@ def ner(text):
             "magnified": False,  # 初始不放大
         }
 
-        # 根据实体类型和文本内容设置高亮和放大
+        # 你可以在这里根据实体类型或其他规则动态修改 highlight 和 magnified
         if node_data["label"] == "PERSON":  # 示例：人物实体高亮
             node_data["highlight"] = True
         if "北京" in node_data["text"]:  # 示例：包含“北京”的实体放大
@@ -38,16 +29,17 @@ def ner(text):
 
         entities.append((node_data["text"], node_data["label"], node_data["highlight"], node_data["magnified"]))
 
-    return {"segments": segments, "entities": entities}
+    return entities
 
 
-# 简单的关系抽取（基于实体顺序的简单关系）
+# 简单的关系抽取（示例：基于规则抽取简单的"关系"）
 def extract_relations(entities):
     relations = []
 
-    # 根据实体顺序添加简单的“关系” (例如：实体1 和 实体2 有某种关系)
+    # 示例：创建一个基于实体顺序的简单关系
     for i in range(len(entities) - 1):
         relation = (entities[i][0], "与", entities[i + 1][0])  # 假设实体之间的关系是“与”
         relations.append(relation)
 
+    # 可以根据实体类型或顺序添加更多的自定义规则
     return relations

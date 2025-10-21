@@ -12,8 +12,8 @@ def build_graph(entities, relations):
             "title": entity[0],  # 实体文本作为标题
             "description": f"描述：{entity[0]}",  # 简单描述为实体文本
             "tags": [entity[1]],  # 假设实体类型作为标签
-            "highlight": entity[2],  # 是否高亮
-            "magnified": entity[3],  # 是否放大
+            "highlight": False,  # 默认不高亮，后期可以动态设置
+            "magnified": False,  # 默认不放大，后期可以动态设置
         }
 
         G.add_node(entity[0], **node_data)
