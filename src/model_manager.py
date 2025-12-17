@@ -97,9 +97,10 @@ class ModelManager:
         Returns:
             本地模型路径
         """
-        # 如果本地路径已存在，直接返回
-        if os.path.exists(local_model_path):
-            logger.info(f"模型 {model_name} 已存在于本地路径: {local_model_path}，跳过下载")
+        # 检查本地模型是否完整（通过检查关键文件）
+        config_path = os.path.join(local_model_path, "config.json")
+        if os.path.exists(config_path):
+            logger.info(f"模型 {model_name} 已完整存在于本地路径: {local_model_path}，跳过下载")
             return local_model_path
         
         # 创建目录
@@ -136,7 +137,7 @@ class ModelManager:
         """
         加载单个模型
         
-        如果模型路径是 HuggingFace 模型名，会先下载并保存到本地 models/ 目录。
+        优先从本地加载模型，如果本地不存在且路径是 HuggingFace 模型名，才会下载。
         
         Args:
             model_name: 模型名称（用于标识）
@@ -153,20 +154,51 @@ class ModelManager:
             
             logger.info(f"正在加载模型: {model_name} (路径: {model_path}, 类型: {model_type})")
             
-            # 如果是 HuggingFace 模型，先下载并保存到本地
+            # 优先检查本地是否存在模型
+            models_dir = "models"
+            local_model_path = os.path.join(models_dir, model_name)
             actual_model_path = model_path
-            if self._is_huggingface_model(model_path):
+            
+            # 检查本地模型是否存在（通过检查 config.json 文件）
+            local_config_path = os.path.join(local_model_path, "config.json")
+            if os.path.exists(local_config_path):
+                logger.info(f"发现本地模型 {model_name}，使用本地路径: {local_model_path}")
+                actual_model_path = local_model_path
+            # 如果本地不存在，且配置的路径是本地路径，直接使用
+            elif os.path.exists(model_path) or model_path.startswith('models/'):
+                logger.info(f"使用配置的本地路径: {model_path}")
+                actual_model_path = model_path
+            # 如果是 HuggingFace 模型且本地不存在，才尝试下载
+            elif self._is_huggingface_model(model_path):
+                logger.warning(f"本地未找到模型 {model_name}，将从 HuggingFace 下载: {model_path}")
                 # 确保 models 目录存在
-                models_dir = "models"
                 os.makedirs(models_dir, exist_ok=True)
-                
-                local_model_path = os.path.join(models_dir, model_name)
                 actual_model_path = self._download_and_save_model(model_name, model_path, local_model_path)
+            else:
+                # 其他情况，直接使用配置的路径
+                actual_model_path = model_path
             
             if model_type == "ner":
                 # 加载NER模型
-                tokenizer = AutoTokenizer.from_pretrained(actual_model_path)
-                model = AutoModelForTokenClassification.from_pretrained(actual_model_path)
+                # 优先从本地加载，避免联网
+                is_local_path = os.path.exists(actual_model_path) or actual_model_path.startswith('models/')
+                
+                if is_local_path:
+                    # 本地路径，优先使用 local_files_only=True 避免联网
+                    logger.info(f"从本地加载模型: {actual_model_path} (local_files_only=True)")
+                    try:
+                        tokenizer = AutoTokenizer.from_pretrained(actual_model_path, local_files_only=True)
+                        model = AutoModelForTokenClassification.from_pretrained(actual_model_path, local_files_only=True)
+                    except Exception as e:
+                        # 如果本地文件不完整，回退到允许联网（但这种情况应该很少见）
+                        logger.warning(f"使用 local_files_only 加载失败: {e}，尝试允许联网补充...")
+                        tokenizer = AutoTokenizer.from_pretrained(actual_model_path)
+                        model = AutoModelForTokenClassification.from_pretrained(actual_model_path)
+                else:
+                    # 远程路径，允许联网下载
+                    logger.info(f"从远程加载模型: {actual_model_path}")
+                    tokenizer = AutoTokenizer.from_pretrained(actual_model_path)
+                    model = AutoModelForTokenClassification.from_pretrained(actual_model_path)
                 
                 # 强制使用GPU
                 device = 0 if torch.cuda.is_available() else -1
