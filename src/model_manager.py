@@ -115,9 +115,13 @@ class ModelManager:
             tokenizer.save_pretrained(local_model_path)
             
             # 下载模型
+            # 优先使用 safetensors 格式，避免 PyTorch 版本限制（CVE-2025-32434）
             logger.info(f"下载模型...")
-            model = AutoModelForTokenClassification.from_pretrained(hf_model_path)
-            model.save_pretrained(local_model_path)
+            model = AutoModelForTokenClassification.from_pretrained(
+                hf_model_path,
+                use_safetensors=True  # 优先使用 safetensors 格式
+            )
+            model.save_pretrained(local_model_path, safe_serialization=True)
             
             logger.info(f"模型 {model_name} 已成功下载并保存到: {local_model_path}")
             return local_model_path
@@ -188,17 +192,24 @@ class ModelManager:
                     logger.info(f"从本地加载模型: {actual_model_path} (local_files_only=True)")
                     try:
                         tokenizer = AutoTokenizer.from_pretrained(actual_model_path, local_files_only=True)
-                        model = AutoModelForTokenClassification.from_pretrained(actual_model_path, local_files_only=True)
+                        model = AutoModelForTokenClassification.from_pretrained(
+                            actual_model_path, 
+                            local_files_only=True,
+                            use_safetensors=True  # 优先使用 safetensors 格式
+                        )
                     except Exception as e:
-                        # 如果本地文件不完整，回退到允许联网（但这种情况应该很少见）
-                        logger.warning(f"使用 local_files_only 加载失败: {e}，尝试允许联网补充...")
-                        tokenizer = AutoTokenizer.from_pretrained(actual_model_path)
-                        model = AutoModelForTokenClassification.from_pretrained(actual_model_path)
+                        # 如果本地模型加载失败，直接跳过，不再尝试联网下载
+                        logger.error(f"本地模型 {model_name} 加载失败: {e}，跳过该模型")
+                        logger.info(f"提示：如果模型文件损坏或不完整，请手动删除 {actual_model_path} 目录后重新下载")
+                        return False
                 else:
                     # 远程路径，允许联网下载
                     logger.info(f"从远程加载模型: {actual_model_path}")
                     tokenizer = AutoTokenizer.from_pretrained(actual_model_path)
-                    model = AutoModelForTokenClassification.from_pretrained(actual_model_path)
+                    model = AutoModelForTokenClassification.from_pretrained(
+                        actual_model_path,
+                        use_safetensors=True  # 优先使用 safetensors 格式
+                    )
                 
                 # 强制使用GPU
                 device = 0 if torch.cuda.is_available() else -1
@@ -236,11 +247,18 @@ class ModelManager:
         """
         加载所有配置的模型
         
+        如果本地模型加载失败，会从配置中移除该模型。
+        
         Returns:
             成功加载的模型数量
         """
         loaded_count = 0
-        for model_config in self.model_configs:
+        failed_models = []  # 记录加载失败的模型
+        
+        # 创建配置列表的副本以便修改
+        models_to_load = list(self.model_configs)
+        
+        for model_config in models_to_load:
             model_name = model_config.get("name")
             model_path = model_config.get("path")
             model_type = model_config.get("type", "ner")
@@ -249,8 +267,32 @@ class ModelManager:
                 logger.warning(f"模型配置不完整，跳过: {model_config}")
                 continue
             
+            # 检查本地模型是否存在
+            models_dir = "models"
+            local_model_path = os.path.join(models_dir, model_name)
+            local_config_path = os.path.join(local_model_path, "config.json")
+            local_model_exists = os.path.exists(local_config_path)
+            
+            # 如果本地模型不存在，跳过（不尝试下载）
+            if not local_model_exists and self._is_huggingface_model(model_path):
+                logger.info(f"本地未找到模型 {model_name}，跳过加载（不自动下载）")
+                failed_models.append(model_name)
+                continue
+            
+            # 尝试加载模型
             if self.load_model(model_name, model_path, model_type):
                 loaded_count += 1
+            else:
+                # 加载失败，记录到失败列表
+                failed_models.append(model_name)
+        
+        # 从配置中移除加载失败的模型
+        if failed_models:
+            logger.warning(f"以下模型加载失败，将从配置中移除: {failed_models}")
+            self.model_configs = [
+                m for m in self.model_configs 
+                if m.get("name") not in failed_models
+            ]
         
         logger.info(f"共加载 {loaded_count} 个模型")
         return loaded_count

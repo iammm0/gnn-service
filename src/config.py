@@ -10,29 +10,20 @@ from typing import Dict, Any, List
 # 模型配置
 MODEL_CONFIG: Dict[str, Any] = {
     # 默认模型
-    "default_model": "bert-base-chinese",
+    "default_model": "roberta-base-chinese",
     
     # 默认策略
     "default_strategy": "single",  # single, vote, union, intersection, weighted
     
     # 模型权重（用于加权策略）
     "model_weights": {
-        "bert-base-chinese": 1.0,
         "roberta-base-chinese": 1.2,
         "macbert-base-chinese": 1.1,
-        "bert-large-chinese": 1.3,
         "roberta-large-chinese": 1.4,
     },
     
-    # 模型列表
+    # 模型列表（仅包含本地已成功加载的模型）
     "models": [
-        {
-            "name": "bert-base-chinese",
-            "path": "models/bert-base-chinese",  # 本地路径：models目录下的模型
-            "type": "ner",
-            "description": "BERT中文基础模型",
-            "enabled": True,
-        },
         {
             "name": "roberta-base-chinese",
             "path": "hfl/chinese-roberta-wwm-ext",  # HuggingFace模型
@@ -46,13 +37,6 @@ MODEL_CONFIG: Dict[str, Any] = {
             "type": "ner",
             "description": "MacBERT中文模型",
             "enabled": True,  # 启用
-        },
-        {
-            "name": "bert-large-chinese",
-            "path": "bert-base-chinese",  # 如果有large版本可以替换
-            "type": "ner",
-            "description": "BERT Large中文模型（如果可用）",
-            "enabled": True,  # 默认禁用
         },
         {
             "name": "roberta-large-chinese",

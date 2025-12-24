@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 _model_manager: Optional[Any] = None
 
 
+def set_model_manager(manager: Any) -> None:
+    """供外部注入模型管理器，避免重复初始化。"""
+    global _model_manager
+    _model_manager = manager
+
+
 def _get_model_manager() -> Any:
     """获取或初始化模型管理器"""
     global _model_manager

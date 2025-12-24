@@ -368,3 +368,8 @@ def get_text_splitter(model_path: Optional[str] = None) -> SemanticTextSplitter:
         _text_splitter = SemanticTextSplitter(model_path)
     return _text_splitter
 
+
+def set_text_splitter(splitter: SemanticTextSplitter) -> None:
+    """设置全局文本分割器实例。"""
+    global _text_splitter
+    _text_splitter = splitter
